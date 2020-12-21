@@ -1,14 +1,14 @@
 package main
 
 import (
-	"context"
+	"crypto/tls"
 	"flag"
-	"fmt"
 	"log"
+	"net/http"
+	"strings"
+	"time"
 
-	pb "github.com/xingshuo/kite/examples/grpc/proto"
 	kite "github.com/xingshuo/kite/pkg"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -18,46 +18,49 @@ var (
 )
 
 type ReqHandler struct {
-	conn   *grpc.ClientConn
-	client pb.GreeterClient
+	client  *http.Client
+	httpReq *http.Request
 }
 
 func (rh *ReqHandler) Init(req *kite.Request, results chan<- *kite.Response) error {
-	conn, err := grpc.Dial(
-		req.Url,
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(kite.GRPCClientInterceptor(results, nil)),
-	)
+	// 跳过证书验证
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	rh.client = &http.Client{
+		Transport: kite.HTTPClientInterceptor(results, tr, nil),
+		Timeout:   5 * time.Second,
+	}
+	headers := make(map[string]string)
+	headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8"
+	httpReq, err := http.NewRequest("GET", req.Url, strings.NewReader(""))
 	if err != nil {
 		return err
 	}
-	rh.conn = conn
-	rh.client = pb.NewGreeterClient(conn)
+	for key, value := range headers {
+		httpReq.Header.Set(key, value)
+	}
+	rh.httpReq = httpReq
 	return nil
 }
 
 func (rh *ReqHandler) OnRequest() error {
-	_, err := rh.client.SayHello(context.Background(), &pb.HelloRequest{Name: "lake"})
+	_, err := rh.client.Do(rh.httpReq)
 	return err
 }
 
 func (rh *ReqHandler) Close() {
-	rh.conn.Close()
 }
 
 func init() {
 	flag.IntVar(&concyNum, "c", 20, "concurrency num")
 	flag.IntVar(&reqNumPerConcy, "n", 50, "per concurrency req num")
-	flag.StringVar(&hostUrl, "host", "localhost:5051", "target url")
+	flag.StringVar(&hostUrl, "host", "https://www.baidu.com", "target url")
 }
 
 func main() {
 	flag.Parse()
 	s := kite.NewServer()
-	// test redirect log func
-	s.RedirectLog(func(format string, a ...interface{}) (n int, err error) {
-		return fmt.Printf("[STAT]:"+format, a...)
-	})
 	_, err := s.RunWithSimpleArgs(hostUrl, concyNum, reqNumPerConcy, func() kite.ReqHandler {
 		return &ReqHandler{}
 	})

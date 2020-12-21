@@ -43,6 +43,7 @@ type MsgType int
 const (
 	MSG_GRPC MsgType = 1
 	MSG_MQ   MsgType = 2
+	MSG_HTTP MsgType = 3
 )
 
 func (mt MsgType) String() string {
@@ -51,6 +52,8 @@ func (mt MsgType) String() string {
 		return "grpc"
 	case MSG_MQ:
 		return "mq"
+	case MSG_HTTP:
+		return "http"
 	default:
 		return "unknown"
 	}

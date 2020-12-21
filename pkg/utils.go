@@ -1,25 +1,30 @@
 package kite
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"net/http"
 	"time"
+
+	"io/ioutil"
 
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 )
 
-func GRPCClientInterceptor(results chan<- *Response, filter func(result *Response, req, resp interface{}, err error)) grpc.UnaryClientInterceptor {
+func GRPCClientInterceptor(results chan<- *Response, filter func(result *Response, req, rsp interface{}, err error)) grpc.UnaryClientInterceptor {
 	var pbMessageInfo proto.InternalMessageInfo
 	return func(
 		ctx context.Context,
 		fullMethod string,
-		req, resp interface{},
+		req, rsp interface{},
 		cc *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
 		startTime := time.Now()
-		err := invoker(ctx, fullMethod, req, resp, cc, opts...)
+		err := invoker(ctx, fullMethod, req, rsp, cc, opts...)
 		result := &Response{}
 		result.UseTime = uint64(time.Since(startTime))
 		result.Method = fullMethod
@@ -32,14 +37,49 @@ func GRPCClientInterceptor(results chan<- *Response, filter func(result *Respons
 			result.IsSucceed = false
 			result.ErrCode = -1001
 		}
-
-		result.ReceivedBytes = uint64(pbMessageInfo.Size(resp.(proto.Message)))
+		result.ReceivedBytes = uint64(pbMessageInfo.Size(rsp.(proto.Message)))
 		if filter != nil {
-			filter(result, req, resp, err)
+			filter(result, req, rsp, err)
 		}
 		results <- result
 		return err
 	}
+}
+
+type HTTPRoundTripFunc func(req *http.Request) (rsp *http.Response, err error)
+
+func (f HTTPRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func HTTPClientInterceptor(results chan<- *Response, rt http.RoundTripper, filter func(result *Response, req *http.Request, rsp *http.Response, err error)) http.RoundTripper {
+	return HTTPRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		startTime := time.Now()
+		rsp, err := rt.RoundTrip(req)
+		result := &Response{}
+		result.UseTime = uint64(time.Since(startTime))
+		result.Method = fmt.Sprintf("[%s]/%s", req.Method, req.URL.String())
+		result.MsgType = MSG_HTTP
+		var body []byte
+		if err == nil || rsp != nil {
+			body, err = ioutil.ReadAll(rsp.Body)
+			rsp.Body = ioutil.NopCloser(bytes.NewReader(body))
+		}
+		// 这一部分业务侧可通过filter灵活适配
+		if err == nil {
+			result.IsSucceed = true
+			result.ErrCode = 200
+		} else {
+			result.IsSucceed = false
+			result.ErrCode = -1001
+		}
+		result.ReceivedBytes = uint64(len(body))
+		if filter != nil {
+			filter(result, req, rsp, err)
+		}
+		results <- result
+		return rsp, err
+	})
 }
 
 func GenerateHistogram(latencies []float64, slowest, fastest float64) []LatencyBucket {
