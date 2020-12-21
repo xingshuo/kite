@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func GRPCClientInterceptor(results chan<- *Response, filter func(rsp *Response, err error)) grpc.UnaryClientInterceptor {
+func GRPCClientInterceptor(results chan<- *Response, filter func(result *Response, req, resp interface{}, err error)) grpc.UnaryClientInterceptor {
 	var pbMessageInfo proto.InternalMessageInfo
 	return func(
 		ctx context.Context,
@@ -20,24 +20,24 @@ func GRPCClientInterceptor(results chan<- *Response, filter func(rsp *Response, 
 	) error {
 		startTime := time.Now()
 		err := invoker(ctx, fullMethod, req, resp, cc, opts...)
-		rsp := &Response{}
-		rsp.UseTime = uint64(time.Since(startTime))
-		rsp.Method = fullMethod
-		rsp.MsgType = MSG_GRPC
+		result := &Response{}
+		result.UseTime = uint64(time.Since(startTime))
+		result.Method = fullMethod
+		result.MsgType = MSG_GRPC
 		// 这一部分业务侧可通过filter灵活适配
 		if err == nil {
-			rsp.IsSucceed = true
-			rsp.ErrCode = 0
+			result.IsSucceed = true
+			result.ErrCode = 0
 		} else {
-			rsp.IsSucceed = false
-			rsp.ErrCode = -1001
+			result.IsSucceed = false
+			result.ErrCode = -1001
 		}
 
-		rsp.ReceivedBytes = uint64(pbMessageInfo.Size(resp.(proto.Message)))
+		result.ReceivedBytes = uint64(pbMessageInfo.Size(resp.(proto.Message)))
 		if filter != nil {
-			filter(rsp, err)
+			filter(result, req, resp, err)
 		}
-		results <- rsp
+		results <- result
 		return err
 	}
 }
