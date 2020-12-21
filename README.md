@@ -1,7 +1,18 @@
 Kite
 ========
     压测工具
+    目前支持grpc, http
 
+Usage
+-----
+    参考examples下用例实现自己业务的ReqHandler
+    `
+    type ReqHandler interface {
+    	Init(req *Request, results chan<- *Response) error
+    	OnRequest() error
+    	Close()
+    }
+    `
 Build
 -----
     windows:
