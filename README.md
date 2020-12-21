@@ -1,7 +1,7 @@
 Kite
 ========
     压测工具
-    目前支持grpc, http
+    目前以拦截器的方式支持grpc, http
 
 Usage
 -----
