@@ -55,9 +55,14 @@ func (mt MsgType) String() string {
 	case MSG_HTTP:
 		return "http"
 	default:
+		if name, ok := usrMsgTypes[mt]; ok {
+			return name
+		}
 		return "unknown"
 	}
 }
+
+var usrMsgTypes = make(map[MsgType]string)
 
 type LatencyBucket struct {
 	// The Mark for histogram bucket in milliseconds

@@ -66,9 +66,3 @@ func (s *Server) RedirectLog(logfn LogFunc) {
 		s.logfn = logfn
 	}
 }
-
-func NewServer() *Server {
-	s := &Server{}
-	s.init()
-	return s
-}
